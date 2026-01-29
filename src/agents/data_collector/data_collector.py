@@ -6,6 +6,14 @@ from src.tools import ToolResult, get_tool_categories, get_tool_by_name
 
 
 class DataCollector(BaseAgent):
+    """
+    数据收集智能体
+    主要环节：
+    1. _set_default_tools: 注册 DeepSearchAgent 和各类金融 API 工具。
+    2. _prepare_executor: 为 Python 代码执行环境注入 call_tool 和 save_result 函数。
+    3. _save_result: 将收集到的结构化数据存入 memory 并缓存至本地列表。
+    4. async_run: 启动收集流程，完成后将所有数据持久化到变量内存中。
+    """
     AGENT_NAME = 'data_collector'
     AGENT_DESCRIPTION = 'a agent that can collect data from the internet and variable apis'
     NECESSARY_KEYS = ['task']

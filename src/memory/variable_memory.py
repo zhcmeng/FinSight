@@ -21,6 +21,14 @@ from src.agents.search_agent.search_agent import DeepSearchResult
 
 
 class Memory:
+    """
+    统一变量内存系统 (Variable Memory)
+    核心功能：
+    1. 状态持久化：保存和加载整个研究过程的日志、数据、依赖关系和智能体状态。
+    2. 智能体管理：支持断点恢复 (Resume)，管理智能体实例的生命周期。
+    3. 任务调度支持：记录任务映射 (Task Mapping) 和任务优先级。
+    4. 变量检索 (RAG)：存储数据 Embedding，支持基于语义的相关数据检索。
+    """
     def __init__(
         self,
         config: Config,
@@ -30,19 +38,19 @@ class Memory:
         self.save_dir = os.path.join(config.working_dir, "memory")
         os.makedirs(self.save_dir, exist_ok=True)
 
-        self.log = []
-        self.data = []
-        self.dependency: Dict[str, List[str]] = {} # parent_agent_id -> [child_agent_id]
-        self.task_mapping = [] # [{task_key, agent_class_name, task_input, agent_id, agent_kwargs}, ...]
-        self.data2embedding = {} # name+description -> embedding
-        self.generated_analysis_tasks = []
-        self.generated_collect_tasks = []
+        self.log = [] # 运行日志列表
+        self.data = [] # 收集到的 ToolResult 或 AnalysisResult 列表
+        self.dependency: Dict[str, List[str]] = {} # 智能体依赖关系：parent_agent_id -> [child_agent_id]
+        self.task_mapping = [] # 任务映射：[{task_key, agent_class_name, task_input, agent_id, agent_kwargs}, ...]
+        self.data2embedding = {} # 语义检索缓存：name+description -> embedding 向量
+        self.generated_analysis_tasks = [] # LLM 自动生成的分析任务列表
+        self.generated_collect_tasks = [] # LLM 自动生成的数据收集任务列表
         
-        # Agent cache
-        self._agents: Dict[str, BaseAgent] = {}  # agent_id -> agent instance
-        self._restored_agents: Dict[str, BaseAgent] = {}  # share restored agents
+        # 智能体实例缓存
+        self._agents: Dict[str, BaseAgent] = {}  # agent_id -> 智能体实例
+        self._restored_agents: Dict[str, BaseAgent] = {}  # 已恢复的智能体共享池
         
-        # Logger
+        # 日志句柄
         self.logger = get_logger()
 
         target_type = config.config.get('target_type', 'general')
@@ -52,7 +60,8 @@ class Memory:
     
     def save(self, checkpoint_name: str = 'memory.pkl'):
         """
-        Persist memory state to a checkpoint.
+        将内存状态持久化到磁盘。
+        注意：不直接保存智能体实例，而是保存其元数据，实例将在需要时通过断点加载。
         """
         # Note: agent instances themselves are not saved—only metadata.
         # Agents are reloaded on demand from their checkpoints.
@@ -88,7 +97,7 @@ class Memory:
     
     def load(self, checkpoint_name: str = 'memory.pkl'):
         """
-        Load memory state from a checkpoint.
+        从磁盘加载内存状态，支持研究流程的中断恢复。
         """
         target_path = os.path.join(self.save_dir, checkpoint_name)
         if not os.path.exists(target_path):
@@ -150,18 +159,12 @@ class Memory:
         **agent_kwargs
     ) -> BaseAgent:
         """
-        Return an existing agent for the task or instantiate a new one.
-
-        Args:
-            agent_class: Agent class to instantiate.
-            task_input: Task payload.
-            resume: Whether to attempt checkpoint recovery.
-            checkpoint_name: Checkpoint filename.
-            priority: Lower values indicate higher priority (default 0).
-            **agent_kwargs: Additional initialization kwargs.
-
-        Returns:
-            BaseAgent instance.
+        获取一个现有的智能体或创建一个新智能体。
+        核心逻辑：
+        1. 任务识别：根据 agent_class 和 task_input 生成唯一标识 task_key。
+        2. 断点查找：如果开启 resume，在 task_mapping 中查找是否存在相同的 task_key。
+        3. 状态恢复：如果找到匹配的 agent_id，尝试从磁盘加载该智能体的历史状态（包括变量空间、执行进度等）。
+        4. 全新创建：如果未找到或恢复失败，则实例化一个新的智能体，并记录其元数据。
         """
         task_key = self._get_task_key(agent_class, task_input)
         

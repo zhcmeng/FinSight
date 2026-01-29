@@ -466,7 +466,13 @@ class BaseAgent:
         checkpoint_name: str = 'latest.pkl',
         prompt_function=None,
     ) -> dict:
-        """Main execution loop."""
+        """
+        Agent 的主运行循环 (Think-Act 循环)
+        1. 检查断点恢复状态
+        2. 构建初始 Prompt 并启动对话
+        3. 迭代执行：LLM 思考 -> 提取并执行 Action -> 获取 Observation -> 更新上下文
+        4. 达到终止条件或最大迭代次数后返回结果
+        """
         # Ensure logger context is set (important for asyncio execution)
         self.logger.set_agent_context(self.id, self.AGENT_NAME)
         

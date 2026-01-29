@@ -16,6 +16,17 @@ from src.utils import image_to_base64
 # TODO: Standardize I/O structures as lightweight classes
 
 class DataAnalyzer(BaseAgent):
+    """
+    数据分析智能体
+    主要环节：
+    1. _prepare_executor: 注入数据访问接口 (get_existed_data, get_data_from_deep_search) 和绘图调色盘。
+    2. _prepare_init_prompt: 根据是否有绘图任务，格式化已收集的数据并构建初始分析指令。
+    3. _draw_chart: 
+       - 解析报告中的 @import 图片占位符。
+       - 调用 VLM (多模态模型) 对生成的图表进行视觉反馈和质量评估。
+       - 自动修正图表中的布局、标签或逻辑错误。
+    4. async_run: 执行“分析-绘图-修正”循环，最终生成带图表的分析报告。
+    """
     AGENT_NAME = 'data_analyzer'
     AGENT_DESCRIPTION = 'a agent that can analyze data and generate report'
     NECESSARY_KEYS = ['task', 'analysis_task']

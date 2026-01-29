@@ -15,6 +15,17 @@ from src.utils.helper import extract_markdown, get_md_img
 from src.utils.index_builder import IndexBuilder
 from src.utils.figure_helper import draw_kline_chart
 class ReportGenerator(BaseAgent):
+    """
+    报告生成智能体
+    主要环节：
+    1. _prepare_executor: 注入数据和分析结果的读取接口，支持代码化的内容编排。
+    2. _phase 流程管理：
+       - 'outline': 生成并评审报告大纲。
+       - 'sections': 逐章节撰写，调用 LLM 根据数据和分析结论填充内容。
+       - 'post_process': 后期处理，包括图片路径替换、摘要/标题生成、封面制作及最终渲染。
+    3. _final_polish: 对章节内容进行润色，并确保图表引用正确。
+    4. async_run: 管理多阶段的报告生产流水线。
+    """
     AGENT_NAME = 'report_generator'
     AGENT_DESCRIPTION = 'a agent that can generate report from the data'
     NECESSARY_KEYS = ['task']
