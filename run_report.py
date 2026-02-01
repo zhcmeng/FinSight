@@ -150,7 +150,6 @@ async def run_report(resume: bool = True):
         'priority': 3,
     })
 
-
     # 步骤 5: 通过 memory 获取或创建所需的 Agent (内部会记录任务状态)
     agents_info = []
     for task_info in tasks_to_run:
