@@ -482,16 +482,20 @@ class Memory:
     
     async def generate_collect_tasks(self, query: str, use_llm_name: str, max_num=10, existing_tasks: List[str] = None) -> List[str]:
         """
-        Generate data collection tasks using LLM.
-        
+        利用大语言模型（LLM）根据研究目标自动生成数据采集任务。
+
+        该方法会结合当前的研究查询（query）和已有的任务列表（existing_tasks），
+        调用指定的 LLM 模型来拆解并生成一系列具体的数据收集指令。生成的任务
+        会自动更新到内存状态中并持久化到磁盘，以支持后续的断点恢复。
+
         Args:
-            query: Research query describing the target and requirements
-            use_llm_name: Name of LLM to use
-            max_num: Maximum number of tasks to generate
-            existing_tasks: List of existing tasks to avoid duplication
-            
+            query (str): 研究目标描述，例如 "研究目标: 中国移动 (ticker: 00941)"。
+            use_llm_name (str): 配置文件中指定的 LLM 模型名称。
+            max_num (int, optional): 允许生成的最大任务数量。默认为 10。
+            existing_tasks (List[str], optional): 已存在的任务列表，用于引导 LLM 避免生成重复任务。
+
         Returns:
-            List of generated collection task strings
+            List[str]: 生成的具体数据采集任务描述列表。
         """
         llm = self.config.llm_dict[use_llm_name]
         

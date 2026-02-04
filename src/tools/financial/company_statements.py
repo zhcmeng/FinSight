@@ -1,16 +1,38 @@
+"""
+该模块提供了一系列工具，用于从 AkShare 获取和预处理上市公司的财务报表数据。
+主要包括资产负债表、利润表和现金流量表的查询与清洗逻辑。
+"""
+
 import akshare as ak
 import pandas as pd
 from ..base import Tool, ToolResult
 
 def preprocess_balance_data(data: pd.DataFrame) -> pd.DataFrame:
+    """
+    预处理原始资产负债表数据，将其转换为整洁的透视表格式。
+    
+    参数:
+        data: 从 akshare 获取的原始 DataFrame。
+        
+    返回:
+        处理后的 DataFrame，包含最近 5 年的数据，金额单位为百万人民币。
+    """
+    # 移除不需要的元数据列（多为东财内部使用的机构代码、证券代码等非财务指标列）
     data.drop(['SECUCODE','SECURITY_CODE','SECURITY_NAME_ABBR','ORG_CODE', 'DATE_TYPE_CODE', 'FISCAL_YEAR','STD_ITEM_CODE','REPORT_DATE'], axis=1, inplace=True)
+    
+    # 从报告日期提取年份，以便后续按年度进行数据透视
     data['YEAR'] = data['STD_REPORT_DATE'].apply(lambda x: pd.to_datetime(x).year)
     data.drop(['STD_REPORT_DATE'], axis=1, inplace=True)
+    
+    # 统一数值显示格式，并将原始单位（元）转换为百万人民币，方便在 UI 中简洁展示
     pd.set_option('display.float_format', '{:.2f}'.format) 
     data['AMOUNT'] = data['AMOUNT'].apply(lambda x: float(x)//1000000)
 
+    # 记录原始科目出现的顺序。由于 pivot 操作会破坏行序，我们需要在透视后按此顺序恢复，
+    # 确保报表符合会计准则的常规展示顺序（如：流动资产 -> 非流动资产）。
     item_order = {item: idx for idx, item in enumerate(data['STD_ITEM_NAME'].unique())}
 
+    # 执行数据透视：将纵向排列的科目金额转换为以年份为列的横向对比格式
     pivot_df = data.pivot_table(
         index='STD_ITEM_NAME',
         columns='YEAR',
@@ -19,37 +41,57 @@ def preprocess_balance_data(data: pd.DataFrame) -> pd.DataFrame:
     ).reset_index()
 
     pivot_df.columns.name = None
+    # 恢复会计科目的原始展示顺序
     pivot_df['original_order'] = pivot_df['STD_ITEM_NAME'].map(item_order)
     pivot_df = pivot_df.sort_values('original_order').drop(columns='original_order')
 
+    # 确保年份列按从旧到新的顺序排列
     year_cols = sorted([col for col in pivot_df.columns if col != 'STD_ITEM_NAME'])
     pivot_df = pivot_df[['STD_ITEM_NAME'] + year_cols]
 
+    # 质量过滤：过滤掉在查询周期内缺失值过多的科目。
+    # 这里允许最多 3 年的数据缺失（在通常的 5-10 年观察期内），以保留可能有意义的历史科目。
     pivot_df['nan_count'] = pivot_df.iloc[:, 1:].isna().sum(axis=1)
     filtered_df = pivot_df[pivot_df['nan_count'] <= 3].copy()
     filtered_df.drop(columns='nan_count', inplace=True)
 
     filtered_df.reset_index(drop=True, inplace=True)
 
+    # 格式化输出：仅展示最近 5 年的数据，并将科目列重命名为中文。
     filtered_df = filtered_df.rename(columns={'STD_ITEM_NAME': '类目'})
     use_columns = ['类目'] + [col for col in filtered_df.columns if col != '类目'][-5:]
     filtered_df = filtered_df.loc[:, use_columns]
+    
+    # 增强可读性：利用 Markdown 语法加粗“总计”或“合计”类科目，方便视觉识别
     filtered_df['类目'] = filtered_df['类目'].apply(lambda x: f"**{x}**" if x.startswith('总') else x)
     return filtered_df
 
 
 def preprocess_income_data(data: pd.DataFrame) -> pd.DataFrame:
     """
-    Preprocess income-statement data into a pivot table.
+    预处理原始利润表数据，将其转换为整洁的透视表格式。
+    
+    参数:
+        data: 从 akshare 获取的原始 DataFrame。
+        
+    返回:
+        处理后的 DataFrame，包含最近 5 年的数据，金额单位为百万人民币。
     """
+    # 移除冗余的元数据列
     data.drop(['SECUCODE','SECURITY_CODE','SECURITY_NAME_ABBR','ORG_CODE', 'DATE_TYPE_CODE', 'FISCAL_YEAR','STD_ITEM_CODE','REPORT_DATE'], axis=1, inplace=True)
+    
+    # 利润表数据通常带有开始日期和结束日期，此处提取年份用于年度对比
     data['YEAR'] = data['START_DATE'].apply(lambda x: pd.to_datetime(x).year)
     data.drop(['START_DATE'], axis=1, inplace=True)
+    
+    # 转换金额单位至百万人民币
     pd.set_option('display.float_format', '{:.2f}'.format) 
     data['AMOUNT'] = data['AMOUNT'].apply(lambda x: float(x)//1000000)
 
+    # 维护会计科目原始顺序（营业收入 -> 营业成本 -> ... -> 净利润）
     item_order = {item: idx for idx, item in enumerate(data['STD_ITEM_NAME'].unique())}
 
+    # 数据透视处理
     pivot_df = data.pivot_table(
         index='STD_ITEM_NAME',
         columns='YEAR',
@@ -61,15 +103,18 @@ def preprocess_income_data(data: pd.DataFrame) -> pd.DataFrame:
     pivot_df['original_order'] = pivot_df['STD_ITEM_NAME'].map(item_order)
     pivot_df = pivot_df.sort_values('original_order').drop(columns='original_order')
 
+    # 年份升序排列
     year_cols = sorted([col for col in pivot_df.columns if col != 'STD_ITEM_NAME'])
     pivot_df = pivot_df[['STD_ITEM_NAME'] + year_cols]
 
+    # 过滤空值超过 3 年的科目
     pivot_df['nan_count'] = pivot_df.iloc[:, 1:].isna().sum(axis=1)
     filtered_df = pivot_df[pivot_df['nan_count'] <= 3].copy()
     filtered_df.drop(columns='nan_count', inplace=True)
 
     filtered_df.reset_index(drop=True, inplace=True)
 
+    # 取最近 5 年数据并加粗总计项
     filtered_df = filtered_df.rename(columns={'STD_ITEM_NAME': '类目'})
     use_columns = ['类目'] + [col for col in filtered_df.columns if col != '类目'][-5:]
     filtered_df = filtered_df.loc[:, use_columns]
@@ -77,6 +122,11 @@ def preprocess_income_data(data: pd.DataFrame) -> pd.DataFrame:
     return filtered_df
 
 class BalanceSheet(Tool):
+    """
+    资产负债表查询工具。
+    提供指定股票的资产、负债和股东权益数据。
+    支持港股 (HK) 和 A 股市场。数据来源主要为东方财富。
+    """
     def __init__(self):
         super().__init__(
             name = "Balance sheet",
@@ -90,26 +140,32 @@ class BalanceSheet(Tool):
 
     def prepare_params(self, task) -> dict:
         """
-        Build parameters from the routing task.
+        从任务对象中构建 API 调用参数。
         """
         if task.stock_code is None:
-            # Should already be populated by the router
+            # 内部校验，防止空代码进入 api_function
             assert False, "Stock code cannot be empty"
         else:
+            # 默认返回年度数据，因为年度报表最能反映企业的长期财务状况
             return {"stock_code": task.stock_code, "market": task.market, "period": "annual"}
     
     def _preprocess_data(self, data: pd.DataFrame) -> pd.DataFrame:
         """
-        Transform the raw balance-sheet dataframe into a cleaner pivot table.
+        类内部使用的预处理逻辑，与全局函数类似，但主要针对 BalanceSheet 的展示需求。
         """
+        # 移除技术性元数据列
         data.drop(['SECUCODE','SECURITY_CODE','SECURITY_NAME_ABBR','ORG_CODE', 'DATE_TYPE_CODE', 'FISCAL_YEAR','STD_ITEM_CODE','REPORT_DATE'], axis=1, inplace=True)
+        # 提取报告年份
         data['YEAR'] = data['STD_REPORT_DATE'].apply(lambda x: pd.to_datetime(x).year)
         data.drop(['STD_REPORT_DATE'], axis=1, inplace=True)
+        # 换算金额单位：元 -> 百万人民币
         pd.set_option('display.float_format', '{:.2f}'.format) 
         data['AMOUNT'] = data['AMOUNT'].apply(lambda x: float(x)//1000000)
 
+        # 保持会计科目的逻辑顺序
         item_order = {item: idx for idx, item in enumerate(data['STD_ITEM_NAME'].unique())}
 
+        # 数据透视
         pivot_df = data.pivot_table(
             index='STD_ITEM_NAME',
             columns='YEAR',
@@ -121,30 +177,33 @@ class BalanceSheet(Tool):
         pivot_df['original_order'] = pivot_df['STD_ITEM_NAME'].map(item_order)
         pivot_df = pivot_df.sort_values('original_order').drop(columns='original_order')
 
+        # 排序年份
         year_cols = sorted([col for col in pivot_df.columns if col != 'STD_ITEM_NAME'])
         pivot_df = pivot_df[['STD_ITEM_NAME'] + year_cols]
 
+        # 过滤低频科目
         pivot_df['nan_count'] = pivot_df.iloc[:, 1:].isna().sum(axis=1)
         filtered_df = pivot_df[pivot_df['nan_count'] <= 3].copy()
         filtered_df.drop(columns='nan_count', inplace=True)
 
         filtered_df.reset_index(drop=True, inplace=True)
 
+        # 设置列名并保留最近 5 年
         filtered_df = filtered_df.rename(columns={'STD_ITEM_NAME': '会计年度 (人民币百万)'})
         use_columns = ['会计年度 (人民币百万)'] + [col for col in filtered_df.columns if col != '会计年度 (人民币百万)'][-5:]
         filtered_df = filtered_df.loc[:, use_columns]
+        # 视觉增强
         filtered_df['会计年度 (人民币百万)'] = filtered_df['会计年度 (人民币百万)'].apply(lambda x: f"**{x}**" if x.startswith('总') else x)
         return filtered_df
 
-        
-
     async def api_function(self, stock_code: str, market: str = "HK", period: str = "年度"):
         """
-        Fetch the balance sheet for the requested ticker.
+        异步调用 AkShare 获取并预处理资产负债表数据。
         """
         period = "年度"
         try:
             if market == "HK":
+                # 获取港股资产负债表，使用东方财富提供的香港财报接口
                 data = ak.stock_financial_hk_report_em(
                     stock = stock_code,
                     symbol = "资产负债表",
@@ -153,15 +212,16 @@ class BalanceSheet(Tool):
                 try:
                     data = self._preprocess_data(data)
                 except Exception as e:
-                    print("Failed to preprocess balance-sheet data", e)
+                    print(f"Failed to preprocess balance-sheet data for {stock_code}", e)
             elif market == "A":
+                # 获取 A 股年度资产负债表，使用东方财富的年度财报接口
                 data = ak.stock_balance_sheet_by_yearly_em(
                     symbol = stock_code,
                 )
             else:
                 raise ValueError(f"Unsupported market flag: {market}. Use 'HK' or 'A'.")
         except Exception as e:
-            print("Failed to fetch balance sheet", e)
+            print(f"Failed to fetch balance sheet for {stock_code}", e)
             data = None
         return [
             ToolResult(
@@ -173,6 +233,10 @@ class BalanceSheet(Tool):
         ]
 
 class IncomeStatement(Tool):
+    """
+    利润表查询工具。
+    提供收入、成本、费用和盈余等详细数据，帮助用户分析企业的盈利能力。
+    """
     def __init__(self):
         super().__init__(
             name = "Income statement",
@@ -184,19 +248,14 @@ class IncomeStatement(Tool):
         )
 
     def prepare_params(self, task) -> dict:
-        """
-        Build parameters from the routing task.
-        """
+        """构建参数"""
         if task.stock_code is None:
-            # Should already be populated by the router
             assert False, "Stock code cannot be empty"
         else:
             return {"stock_code": task.stock_code, "market": task.market, "period": "annual"}
 
     def _preprocess_data(self, data: pd.DataFrame) -> pd.DataFrame:
-        """
-        Transform the raw income-statement dataframe into a cleaner pivot table.
-        """
+        """利润表数据清洗逻辑"""
         data.drop(['SECUCODE','SECURITY_CODE','SECURITY_NAME_ABBR','ORG_CODE', 'DATE_TYPE_CODE', 'FISCAL_YEAR','STD_ITEM_CODE','REPORT_DATE'], axis=1, inplace=True)
         data['YEAR'] = data['START_DATE'].apply(lambda x: pd.to_datetime(x).year)
         data.drop(['START_DATE'], axis=1, inplace=True)
@@ -233,24 +292,23 @@ class IncomeStatement(Tool):
         
 
     async def api_function(self, stock_code: str, market: str = "HK", period: str = "年度"):
-        """
-        Fetch the income statement for the requested ticker.
-        """
+        """获取请求股票的利润表"""
         period = "年度"
         try:
             if market == "HK":
+                # 获取港股利润表
                 data = ak.stock_financial_hk_report_em(stock=stock_code, symbol="利润表", indicator=period)
                 try:
                     data = self._preprocess_data(data)
                 except Exception as e:
-                    print("Failed to preprocess income-statement data", e)
+                    print(f"Failed to preprocess income-statement data for {stock_code}", e)
             elif market == "A":
+                # 获取 A 股利润表，通过同花顺 (iFinD) 接口获取，该接口数据较为全面
                 data = ak.stock_financial_benefit_ths(symbol=stock_code, indicator='按年度')
             else:
                 raise ValueError(f"Unsupported market flag: {market}. Use 'HK' or 'A'.")
         except Exception as e:
-            print("Failed to fetch income statement", e)
-            print("Parameters", stock_code, market, period)
+            print(f"Failed to fetch income statement for {stock_code}", e)
             data = None
         
         return [
@@ -264,6 +322,10 @@ class IncomeStatement(Tool):
 
 
 class CashFlowStatement(Tool):
+    """
+    现金流量表查询工具。
+    展示企业在经营、投资和筹资活动中产生的现金流入与流出，衡量企业的现金管理能力。
+    """
     def __init__(self):
         super().__init__(
             name="Cash-flow statement",
@@ -275,18 +337,14 @@ class CashFlowStatement(Tool):
         )
 
     def prepare_params(self, task) -> dict:
-        """
-        Build parameters from the routing task.
-        """
+        """构建参数"""
         if task.stock_code is None:
-            # Should already be populated by the router
             assert False, "Stock code cannot be empty"
         else:
             return {"stock_code": task.stock_code, "market": task.market, "period": "年度"}
+
     def _preprocess_data(self, data: pd.DataFrame) -> pd.DataFrame:
-        """
-        Transform the raw cash-flow dataframe into a cleaner pivot table.
-        """
+        """现金流量表数据清洗"""
         data.drop(['SECUCODE','SECURITY_CODE','SECURITY_NAME_ABBR','ORG_CODE', 'DATE_TYPE_CODE', 'FISCAL_YEAR','STD_ITEM_CODE','REPORT_DATE'], axis=1, inplace=True)
         data['YEAR'] = data['START_DATE'].apply(lambda x: pd.to_datetime(x).year)
         data.drop(['START_DATE'], axis=1, inplace=True)
@@ -323,24 +381,23 @@ class CashFlowStatement(Tool):
 
 
     async def api_function(self, stock_code: str, market: str = "HK", period: str = "年度"):
-        """
-        Fetch the cash-flow statement for the requested ticker.
-        """
+        """获取请求股票的现金流量表"""
         period = "年度"
         try:
             if market == "HK":
+                # 获取港股现金流量表
                 data = ak.stock_financial_hk_report_em(stock=stock_code, symbol="现金流量表", indicator=period)
                 try:
                     data = self._preprocess_data(data)
                 except Exception as e:
-                    print("Failed to preprocess cash-flow data", e)
+                    print(f"Failed to preprocess cash-flow data for {stock_code}", e)
             elif market == "A":
-                #data = ak.stock_cash_flow_sheet_by_yearly_em(symbol=stock_code)
+                # 获取 A 股现金流量表，同样使用同花顺接口
                 data = ak.stock_financial_cash_ths(symbol=stock_code, indicator='按年度')
             else:
                 raise ValueError(f"Unsupported market flag: {market}. Use 'HK' or 'A'.")
         except Exception as e:
-            print("Failed to fetch cash-flow statement", e)
+            print(f"Failed to fetch cash-flow statement for {stock_code}", e)
             data = None
         return [
             ToolResult(

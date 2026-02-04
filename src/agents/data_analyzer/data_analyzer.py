@@ -9,7 +9,6 @@ from threading import Semaphore
 from src.agents.base_agent import BaseAgent
 from src.agents import DeepSearchAgent
 from src.tools import ToolResult
-from src.utils import IndexBuilder
 from src.utils import image_to_base64
 
 # TODO: Break parameter passing into explicit arguments

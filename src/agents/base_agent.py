@@ -467,13 +467,31 @@ class BaseAgent:
         prompt_function=None,
     ) -> dict:
         """
-        Agent 的主运行循环 (Think-Act 循环)
-        1. 检查断点恢复状态
-        2. 构建初始 Prompt 并启动对话
-        3. 迭代执行：LLM 思考 -> 提取并执行 Action -> 获取 Observation -> 更新上下文
-        4. 达到终止条件或最大迭代次数后返回结果
+        Agent 的主运行循环 (Think-Act 循环)。
+        
+        该方法实现了典型的 ReAct 模式：
+        1.  **断点恢复**：如果设置了 resume=True，会尝试从本地 checkpoint 加载历史对话状态。
+        2.  **初始化**：调用 prompt_function（默认为 _prepare_init_prompt）构建初始的 System Prompt 和 User Task。
+        3.  **迭代循环**：
+            -   **Think**：调用 LLM (self.llm.generate) 根据当前对话历史生成思考和行动指令。
+            -   **Act**：解析 LLM 响应中的 Action（如调用工具、执行代码），并调用 _execute_action 执行。
+            -   **Observe**：将执行结果作为新的 Observation 存入对话历史，作为下一轮思考的上下文。
+        4.  **状态持久化**：每一轮迭代后都会将当前状态（对话历史、当前轮次等）保存到磁盘，以便异常中断后恢复。
+        5.  **终止条件**：当 LLM 给出最终结论 (action_result['continue'] 为 False) 或达到最大迭代次数时退出。
+
+        Args:
+            input_data (dict): 包含任务相关信息的输入字典，如 {'task': '...'}。
+            max_iterations (int): 最大迭代轮次，防止 Agent 进入无限循环。
+            stop_words (list[str]): LLM 生成的停止词，用于截断响应。
+            echo (bool): 是否在日志中打印详细的中间过程。
+            resume (bool): 是否从上次中断的地方恢复运行。
+            checkpoint_name (str): 持久化状态的文件名。
+            prompt_function (callable): 用于初始化对话历史的函数。
+
+        Returns:
+            dict: 包含最终结果 (final_result) 和完整对话历史 (conversation_history) 的结果字典。
         """
-        # Ensure logger context is set (important for asyncio execution)
+        # 确保日志上下文已设置（对于异步执行中的日志归属非常重要）
         self.logger.set_agent_context(self.id, self.AGENT_NAME)
         
         self._check_necessary_data(input_data)
