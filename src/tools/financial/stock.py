@@ -92,11 +92,19 @@ class ShareHoldingStructure(Tool):
     async def api_function(self, stock_code: str, market: str = "HK"):
         """
         获取指定股票的股东名单。
-        A 股使用 AkShare 接口，港股通过东方财富 API 爬取。
+        
+        业务逻辑：
+            - A 股：使用 AkShare 接口，直接获取前十大股东。
+            - 港股：通过东方财富数据中心 API 爬取。由于港股存在 HKSCC（香港中央结算公司）代持现象，
+              返回的数据中 EQUITY_TYPE 会区分法人股东和实际持有人。
+        
+        参数：
+            stock_code: 股票代码（如 000001 或 00700）
+            market: 市场标识，'A' 表示 A 股，'HK' 表示港股
         """
         try:
             if market == "A":
-                # 获取 A 股主要股东
+                # 获取 A 股主要股东，接口返回最近报告期的十大股东数据
                 data = ak.stock_main_stock_holder(stock=stock_code)
             elif market == "HK":
                 # 从东方财富数据中心爬取港股持股数据
@@ -104,6 +112,7 @@ class ShareHoldingStructure(Tool):
                     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
                 }
                 # 注意：此处的 API 链接包含特定的报告日期和 SecuCode 格式
+                # SECUCODE 需要带后缀 .HK，REPORT_DATE 设为 2024-12-31 以获取最新年报或季报数据
                 output = requests.get(
                     f"https://datacenter.eastmoney.com/securities/api/data/v1/get?reportName=RPT_HKF10_EQUITYCHG_HOLDER&columns=SECURITY_CODE%2CSECUCODE%2CORG_CODE%2CNOTICE_DATE%2CREPORT_DATE%2CHOLDER_NAME%2CTOTAL_SHARES%2CTOTAL_SHARES_RATIO%2CDIRECT_SHARES%2CSHARES_CHG_RATIO%2CSHARES_TYPE%2CEQUITY_TYPE%2CHOLD_IDENTITY%2CIS_ZJ&quoteColumns=&filter=(SECUCODE%3D%22{stock_code}.HK%22)(REPORT_DATE%3D%272024-12-31%27)&pageNumber=1&pageSize=&sortTypes=-1%2C-1&sortColumns=EQUITY_TYPE%2CTOTAL_SHARES&source=F10&client=PC&v=032666133943694553",
                     headers = headers,
@@ -113,23 +122,24 @@ class ShareHoldingStructure(Tool):
                     output = json.loads(html)
                     data = output["result"]["data"]
                     data = pd.DataFrame(data)
-                    # 重命名列名以增强可读性
+                    # 重命名列名以增强可读性，将原始 API 的大写字段映射为更具语义的名称
                     data = data.rename(columns={
-                        'HOLDER_NAME': 'holder_name',
-                        'TOTAL_SHARES': 'shares',
-                        'TOTAL_SHARES_RATIO': 'ownership_pct',
-                        'DIRECT_SHARES': 'direct_shares',
-                        'HOLD_IDENTITY': 'ownership_type',
-                        'IS_ZJ': 'is_direct'
+                        'HOLDER_NAME': 'holder_name',      # 股东名称
+                        'TOTAL_SHARES': 'shares',          # 持股数量
+                        'TOTAL_SHARES_RATIO': 'ownership_pct', # 持股比例
+                        'DIRECT_SHARES': 'direct_shares',  # 直接持股数量
+                        'HOLD_IDENTITY': 'ownership_type', # 股东身份
+                        'IS_ZJ': 'is_direct'               # 是否直接持股
                     })
-                    # 仅保留核心字段
+                    # 仅保留核心字段，剔除不需要的元数据
                     data = data.loc[:, ['holder_name', 'shares', 'ownership_pct', 'ownership_type', 'is_direct']]
+                    # 转换布尔标识为可读文本
                     data['is_direct'] = data['is_direct'].map({'1': 'Yes', '0': 'No'})
-                    # 按持股比例降序排列
+                    # 按持股比例降序排列，以便直观展示大股东
                     data.sort_values(by='ownership_pct', ascending=False, inplace=True)
                     data.reset_index(drop=True, inplace=True)
                 except Exception as e:
-                    print("Failed to parse Hong Kong shareholding structure", e)
+                    print(f"Failed to parse Hong Kong shareholding structure for {stock_code}: {e}")
                     data = None
             else:
                 raise ValueError(f"Unsupported market flag: {market}. Use 'HK' or 'A'.")
@@ -166,18 +176,28 @@ class StockBaseInfo(Tool):
     async def api_function(self, stock_code: str, market: str = "HK"):
         """
         通过 efinance 获取个股的基础估值信息。
+        
+        该工具返回的数据包含：
+            - 股票名称、代码
+            - 当前价格、涨跌幅、涨跌额
+            - 成交量、成交额、振幅
+            - 最高、最低、开盘、昨收
+            - 量比、换手率
+            - 市盈率 (PE-TTM)、市净率 (PB)、市盈率 (静)
+            - 总市值、流通市值
         """
         try:
+            # ef.stock.get_base_info 会返回一个包含上述所有实时与估值指标的 Series 或 DataFrame
             data = ef.stock.get_base_info(stock_code)
         except Exception as e:
-            print("Failed to fetch stock valuation info", e)
+            print(f"Failed to fetch stock valuation info for {stock_code}: {e}")
             data = None
         return [
             ToolResult(
                 name=f"{self.name} (ticker: {stock_code})",
                 description=self.description,
                 data=data,
-                source="Exchange filings: Equity valuation metrics."
+                source="Exchange filings: Equity valuation metrics via efinance."
             )
         ]
 

@@ -11,31 +11,43 @@ from ..base import Tool, ToolResult
 class HuShen_Index(Tool):
     """
     沪深300指数日线数据获取工具。
-    返回包括开盘价、最高价、最低价、收盘价、成交量、成交额等信息。
+    
+    该指数由沪深市场中规模大、流动性好的最具代表性的300只股票组成，综合反映沪深A股市场整体表现。
+    返回数据包括：日期、开盘、收盘、最高、最低、成交量、成交额等。
     """
     def __init__(self):
         super().__init__(
             name="CSI 300 daily data",
-            description="Daily CSI 300 index data, including OHLC, volume, turnover, returns, and turnover ratio.",
+            description="Daily CSI 300 index data, including OHLC (Open, High, Low, Close), volume, turnover, returns, and turnover ratio.",
             parameters=[]
         )
 
     def prepare_params(self, task) -> dict:
         """
-        从路由任务构建参数（此工具不需要额外参数）。
+        从路由任务构建参数。此工具为全量指数查询，不需要额外参数。
         """
         return {}
 
     async def api_function(self):
         """
         获取沪深300指数的历史时间序列数据。
-        使用新浪财经接口，代码为 sh000300。
+        
+        接口说明：
+            - 数据源：新浪财经 (Sina Finance)
+            - 指数代码：sh000300 (上海交易所代码前缀为 sh)
+            - 返回字段含义：
+                - date: 交易日期
+                - open: 当日开盘价
+                - high: 当日最高价
+                - low: 当日最低价
+                - close: 当日收盘价
+                - volume: 成交量（股）
         """
         try:
-            # 获取沪深300指数日线数据
+            # ak.stock_zh_index_daily 是 AkShare 提供的标准指数历史数据接口
             data = ak.stock_zh_index_daily(symbol="sh000300")
         except Exception as e:
-            print("Failed to fetch CSI 300 data", e)
+            print(f"Failed to fetch CSI 300 data from Sina: {e}")
             data = None
         if data is not None:
             return [
@@ -53,7 +65,8 @@ class HuShen_Index(Tool):
 class HengSheng_Index(Tool):
     """
     恒生指数 (HSI) 日线数据获取工具。
-    提供港股市场的基准指数行情。
+    
+    恒生指数是香港蓝筹股变化的指标，由香港最大且最具流动性的公司组成。
     """
     def __init__(self):
         super().__init__(
@@ -64,20 +77,24 @@ class HengSheng_Index(Tool):
 
     def prepare_params(self, task) -> dict:
         """
-        构建参数（不需要额外参数）。
+        构建参数。
         """
         return {}
 
     async def api_function(self):
         """
         获取恒生指数的历史时间序列。
-        使用新浪财经的港股指数接口，代码为 HSI。
+        
+        接口说明：
+            - 数据源：新浪财经港股接口
+            - 指数代码：HSI
+            - 返回数据包含：日期、开盘、最高、最低、收盘、成交量、成交额。
         """
         try:
-            # 获取恒生指数日线数据
+            # ak.stock_hk_index_daily_sina 专门用于获取港股指数的历史日线
             data = ak.stock_hk_index_daily_sina(symbol="HSI")
         except Exception as e:
-            print("Failed to fetch Hang Seng data", e)
+            print(f"Failed to fetch Hang Seng data: {e}")
             data = None
         if data is not None:
             return [
@@ -94,12 +111,13 @@ class HengSheng_Index(Tool):
 class ShangZheng_Index(Tool):
     """
     上证指数日线数据获取工具。
-    反映上海证券交易所挂牌股票的总体走势。
+    
+    上证指数（上证综指）反映了上海证券交易所全部上市股票的价格变动情况，是 A 股市场最重要的风向标。
     """
     def __init__(self):
         super().__init__(
-            name="SSE Composite daily data",
-            description="Daily Shanghai Composite index data with OHLC, volume, turnover, returns, and turnover ratio.",
+            name="SSE Composite Index daily data",
+            description="Daily SSE Composite Index (sh000001) data including OHLC and volume.",
             parameters=[]
         )
 
@@ -111,14 +129,16 @@ class ShangZheng_Index(Tool):
 
     async def api_function(self):
         """
-        获取上证指数的时间序列数据。
-        代码为 sh000001。
+        获取上证指数的历史时间序列。
+        
+        代码说明：
+            - sh000001: 上证指数在上海交易所的标准代码。
         """
         try:
             # 获取上证指数日线数据
             data = ak.stock_zh_index_daily(symbol="sh000001")
         except Exception as e:
-            print("Failed to fetch SSE Composite data", e)
+            print(f"Failed to fetch SSE Composite Index data: {e}")
             data = None
         if data is not None:
             return [
@@ -126,7 +146,7 @@ class ShangZheng_Index(Tool):
                     name = f"{self.name}",
                     description = self.description,
                     data = data,
-                    source="Sina Finance: SSE Composite daily data. https://finance.sina.com.cn/realstock/company/sz000001/nc.shtml"
+                    source="Sina Finance: SSE Composite Index daily data. https://finance.sina.com.cn/realstock/company/sz000001/nc.shtml"
                 )
             ]
         else:
@@ -136,11 +156,12 @@ class ShangZheng_Index(Tool):
 class NSDK_Index(Tool):
     """
     纳斯达克综合指数 (.IXIC) 日线数据获取工具。
-    反映美国纳斯达克市场的整体表现。
+    
+    纳斯达克综合指数反映了纳斯达克市场所有上市公司的股价走势，包含大量高科技企业。
     """
     def __init__(self):
         super().__init__(
-            name="Nasdaq Composite daily data",
+            name="Nasdaq Composite Index daily data",
             description="Daily Nasdaq Composite data covering OHLC, volume, turnover, returns, and turnover ratio.",
             parameters=[]
         )
@@ -154,13 +175,15 @@ class NSDK_Index(Tool):
     async def api_function(self):
         """
         获取纳斯达克指数的时间序列。
-        使用美股行情接口，代码为 .IXIC。
+        
+        代码说明：
+            - .IXIC: 纳斯达克综合指数的代码。
         """
         try:
             # 获取纳斯达克指数日线数据
             data = ak.index_us_stock_sina(symbol=".IXIC")
         except Exception as e:
-            print("Failed to fetch Nasdaq data", e)
+            print(f"Failed to fetch Nasdaq data: {e}")
             data = None
         if data is not None:
             return [
@@ -168,7 +191,7 @@ class NSDK_Index(Tool):
                     name = f"{self.name}",
                     description = self.description,
                     data = data,
-                    source="Sina Finance: Nasdaq Composite daily data. https://stock.finance.sina.com.cn/usstock/quotes/.IXIC.html"
+                    source="Sina Finance: Nasdaq Composite Index daily data. https://stock.finance.sina.com.cn/usstock/quotes/.IXIC.html"
                 )
             ]
         else:
