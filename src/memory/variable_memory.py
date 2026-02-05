@@ -540,6 +540,9 @@ class Memory:
         if isinstance(output, dict):
             output = output.get('tasks', output.get('analysis_tasks', []))
         
+        if not isinstance(output, list):
+            output = []
+        
         output = output[:max_num]
         self.generated_analysis_tasks = output
         self.save()
@@ -581,6 +584,9 @@ class Memory:
         if isinstance(output, dict):
             output = output.get('tasks', output.get('collect_tasks', output.get('collection_tasks', [])))
         
+        if not isinstance(output, list):
+            output = []
+            
         output = output[:max_num]
         self.generated_collect_tasks = output
         self.save()

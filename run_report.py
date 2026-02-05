@@ -35,8 +35,8 @@ async def run_report(resume: bool = True):
         config_file_path='my_config.yaml',
         config_dict={}
     )
-    collect_tasks = config.config['custom_collect_tasks']
-    analysis_tasks = config.config['custom_analysis_tasks']
+    collect_tasks = config.config.get('custom_collect_tasks') or []
+    analysis_tasks = config.config.get('custom_analysis_tasks') or []
     
     # 步骤 1: 初始化内存系统
     memory = Memory(config=config)
@@ -235,5 +235,5 @@ async def run_report(resume: bool = True):
 
 if __name__ == '__main__':
     # 默认开启断点恢复模式
-    resume = True
+    resume = False
     asyncio.run(run_report(resume=resume))
