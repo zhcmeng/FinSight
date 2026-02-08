@@ -45,6 +45,7 @@ build/
 # IDE
 .vscode/
 .idea/
+.trae/documents/
 *.swp
 *.swo
 *.sublime-workspace
