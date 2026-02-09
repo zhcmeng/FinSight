@@ -14,57 +14,38 @@ description: 公司财报、市场指数与个股数据的终端查询工作流
 
 ## 指令
 
-### 1. 公司报表查询 (Company Statements)
-**严禁**自行编写 Python 脚本。你 **必须** 通过终端（Terminal）调用提供的 CLI 适配器。
+**重要提示**: 
+- **严禁**自行编写 Python 脚本。
+- 你 **必须** 通过终端（Terminal）调用提供的 CLI 适配器。
+- 下列命令模板已通过验证，**无需**通过 `--help` 再次确认参数。
+- **强制落地**: 请务必使用 `--output` 参数将结果保存到任务指定的 `data/` 目录下。
 
+### 1. 公司报表查询 (Company Statements)
 - **资产负债表**:
   ```bash
-  python src/trae_tool_adapter.py statement --type balance --code <股票代码> --market <HK|A>
+  python src/trae_tool_adapter.py statement --type balance --code <代码> --market <HK|A> --output <路径>
   ```
 - **利润表**:
   ```bash
-  python src/trae_tool_adapter.py statement --type income --code <股票代码> --market <HK|A>
+  python src/trae_tool_adapter.py statement --type income --code <代码> --market <HK|A> --output <路径>
   ```
 - **现金流量表**:
   ```bash
-  python src/trae_tool_adapter.py statement --type cashflow --code <股票代码> --market <HK|A>
+  python src/trae_tool_adapter.py statement --type cashflow --code <代码> --market <HK|A> --output <路径>
   ```
 
 ### 2. 市场指数查询 (Market Data)
-- **沪深300指数**:
+- **指数查询**:
   ```bash
-  python src/trae_tool_adapter.py market --index hushen
-  ```
-- **恒生指数**:
-  ```bash
-  python src/trae_tool_adapter.py market --index hengsheng
-  ```
-- **上证指数**:
-  ```bash
-  python src/trae_tool_adapter.py market --index shangzheng
-  ```
-- **纳斯达克指数**:
-  ```bash
-  python src/trae_tool_adapter.py market --index nsdk
+  python src/trae_tool_adapter.py market --index <hushen|hengsheng|shangzheng|nsdk> --output <路径>
   ```
 
 ### 3. 个股数据查询 (Stock Data)
-- **基础信息 (行业、主营业务)**:
-  ```bash
-  python src/trae_tool_adapter.py stock --type basic --code <股票代码> --market <HK|A>
-  ```
-- **股东结构 (十大股东)**:
-  ```bash
-  python src/trae_tool_adapter.py stock --type holders --code <股票代码> --market <HK|A>
-  ```
-- **估值指标 (PE, PB, ROE)**:
-  ```bash
-  python src/trae_tool_adapter.py stock --type valuation --code <股票代码> --market <HK|A>
-  ```
-- **历史行情 (K线数据)**:
-  ```bash
-  python src/trae_tool_adapter.py stock --type price --code <股票代码> --market <HK|A>
-  ```
+- **基础信息**: `python src/trae_tool_adapter.py stock --type basic --code <代码> --market <HK|A> --output <路径>`
+- **分红历史**: `python src/trae_tool_adapter.py stock --type dividend --code <代码> --market <HK|A> --output <路径>`
+- **股东结构**: `python src/trae_tool_adapter.py stock --type holders --code <代码> --market <HK|A> --output <路径>`
+- **估值指标**: `python src/trae_tool_adapter.py stock --type valuation --code <代码> --market <HK|A> --output <路径>`
+- **历史行情**: `python src/trae_tool_adapter.py stock --type price --code <代码> --market <HK|A> --output <路径>`
 
 ## 最佳实践
 1. **优先获取基础信息**: 在进行任何深度分析前，先调用 `stock --type basic` 了解公司所属行业和主营业务。

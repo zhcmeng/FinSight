@@ -14,7 +14,7 @@ import pandas as pd
 from typing import List
 
 # Import Financial Tools
-from src.tools.financial.stock import StockBasicInfo, StockPrice, StockBaseInfo, ShareHoldingStructure
+from src.tools.financial.stock import StockBasicInfo, StockPrice, StockBaseInfo, ShareHoldingStructure, StockDividend
 from src.tools.financial.company_statements import BalanceSheet, IncomeStatement, CashFlowStatement
 from src.tools.financial.market import HuShen_Index, HengSheng_Index, ShangZheng_Index, NSDK_Index
 
@@ -58,7 +58,7 @@ async def run_tool(tool_instance, **kwargs):
     try:
         if hasattr(tool_instance, 'api_function'):
             # Check if it's a financial stock tool which has specific signature
-            if isinstance(tool_instance, (StockBasicInfo, StockPrice, StockBaseInfo, ShareHoldingStructure)):
+            if isinstance(tool_instance, (StockBasicInfo, StockPrice, StockBaseInfo, ShareHoldingStructure, StockDividend)):
                 return await tool_instance.api_function(stock_code=kwargs.get('code'), market=kwargs.get('market', 'HK'))
             
             # Check if it's a statement tool
@@ -80,34 +80,39 @@ async def run_tool(tool_instance, **kwargs):
 
 async def main():
     parser = argparse.ArgumentParser(description='FinSight Trae Tool Adapter')
+    
+    # Define a parent parser with common arguments
+    parent_parser = argparse.ArgumentParser(add_help=False)
+    parent_parser.add_argument('--output', help='Output file path (optional)')
+
     subparsers = parser.add_subparsers(dest='category', help='Tool category')
 
     # Stock Category
-    stock_parser = subparsers.add_parser('stock', help='Individual stock tools')
-    stock_parser.add_argument('--type', choices=['basic', 'price', 'valuation', 'holders'], required=True)
+    stock_parser = subparsers.add_parser('stock', parents=[parent_parser], help='Individual stock tools')
+    stock_parser.add_argument('--type', choices=['basic', 'price', 'valuation', 'holders', 'dividend'], required=True)
     stock_parser.add_argument('--code', required=True)
     stock_parser.add_argument('--market', default='HK', choices=['HK', 'A'])
 
     # Statement Category
-    stmt_parser = subparsers.add_parser('statement', help='Financial statement tools')
+    stmt_parser = subparsers.add_parser('statement', parents=[parent_parser], help='Financial statement tools')
     stmt_parser.add_argument('--type', choices=['balance', 'income', 'cashflow'], required=True)
     stmt_parser.add_argument('--code', required=True)
     stmt_parser.add_argument('--market', default='HK', choices=['HK', 'A'])
 
     # Market Category
-    mkt_parser = subparsers.add_parser('market', help='Market index tools')
+    mkt_parser = subparsers.add_parser('market', parents=[parent_parser], help='Market index tools')
     mkt_parser.add_argument('--index', choices=['hushen', 'hengsheng', 'shangzheng', 'nsdk'], required=True)
 
     # Industry Category
-    ind_parser = subparsers.add_parser('industry', help='Industry indicators')
+    ind_parser = subparsers.add_parser('industry', parents=[parent_parser], help='Industry indicators')
     ind_parser.add_argument('--type', choices=['gyzjz', 'production_yoy', 'pmi', 'cx_pmi', 'cpi', 'ppi', 'gdp', 'xfzxx', 'retail'], required=True)
 
     # Macro Category
-    macro_parser = subparsers.add_parser('macro', help='Macro indicators')
+    macro_parser = subparsers.add_parser('macro', parents=[parent_parser], help='Macro indicators')
     macro_parser.add_argument('--type', choices=['leverage', 'lpr', 'unemployment', 'shrzgm', 'trade', 'czsr', 'money_supply', 'reserve', 'bank_balance'], required=True)
 
     # Web Category
-    web_parser = subparsers.add_parser('web', help='Web and search tools')
+    web_parser = subparsers.add_parser('web', parents=[parent_parser], help='Web and search tools')
     web_parser.add_argument('--type', choices=['click', 'search_bing', 'search_bocha', 'search_google', 'search_finance'], required=True)
     web_parser.add_argument('--urls', help='Comma separated URLs for click')
     web_parser.add_argument('--task', help='Task description for click')
@@ -122,7 +127,7 @@ async def main():
     tool_instance = None
     
     if args.category == 'stock':
-        tool_map = {'basic': StockBasicInfo, 'price': StockPrice, 'valuation': StockBaseInfo, 'holders': ShareHoldingStructure}
+        tool_map = {'basic': StockBasicInfo, 'price': StockPrice, 'valuation': StockBaseInfo, 'holders': ShareHoldingStructure, 'dividend': StockDividend}
         tool_instance = tool_map[args.type]()
     elif args.category == 'statement':
         tool_map = {'balance': BalanceSheet, 'income': IncomeStatement, 'cashflow': CashFlowStatement}
@@ -164,9 +169,22 @@ async def main():
         else:
             output_data = convert_to_serializable(results)
                     
-        print(json.dumps(output_data, ensure_ascii=False, indent=2, cls=DateEncoder))
+        json_str = json.dumps(output_data, ensure_ascii=False, indent=2, cls=DateEncoder)
+        
+        if args.output:
+            # Create directory if it doesn't exist
+            output_dir = os.path.dirname(os.path.abspath(args.output))
+            if output_dir and not os.path.exists(output_dir):
+                os.makedirs(output_dir)
+            
+            with open(args.output, 'w', encoding='utf-8') as f:
+                f.write(json_str)
+            # Use JSON output for successful file write as well, to keep it consistent
+            print(json.dumps({"status": "success", "file": args.output, "message": f"Successfully wrote results to {args.output}"}, ensure_ascii=False))
+        else:
+            print(json_str)
     else:
-        print(json.dumps({"error": "Unknown tool"}, ensure_ascii=False))
+        print(json.dumps({"error": "Unknown tool"}, ensure_ascii=False), file=sys.stderr)
         sys.exit(1)
 
 if __name__ == "__main__":

@@ -14,48 +14,39 @@ description: 中国宏观经济行业指标的终端查询工作流
 
 ## 指令
 
-**严禁**自行编写 Python 脚本。你 **必须** 通过终端（Terminal）调用提供的 CLI 适配器。
+**重要提示**: 
+- **严禁**自行编写 Python 脚本。你 **必须** 通过终端（Terminal）调用提供的 CLI 适配器。
+- 下列命令模板已通过验证，**无需**通过 `--help` 确认参数。
+- **强制落地**: 请务必使用 `--output <路径>` 将结果保存到任务指定的 `data/` 目录下。
 
 ### 1. 工业与生产
 - **工业增加值增长**:
   ```bash
-  python src/trae_tool_adapter.py industry --type gyzjz
+  python src/trae_tool_adapter.py industry --type gyzjz --output <路径>
   ```
 - **规模以上工业生产同比增长**:
   ```bash
-  python src/trae_tool_adapter.py industry --type production_yoy
+  python src/trae_tool_adapter.py industry --type production_yoy --output <路径>
   ```
 
 ### 2. 采购经理指数 (PMI)
 - **官方制造业 PMI**:
   ```bash
-  python src/trae_tool_adapter.py industry --type pmi
+  python src/trae_tool_adapter.py industry --type pmi --output <路径>
   ```
 - **财新服务业 PMI**:
   ```bash
-  python src/trae_tool_adapter.py industry --type cx_pmi
+  python src/trae_tool_adapter.py industry --type cx_pmi --output <路径>
   ```
 
 ### 3. 物价与消费
-- **消费者物价指数 (CPI)**:
+- **CPI/PPI/GDP**:
   ```bash
-  python src/trae_tool_adapter.py industry --type cpi
+  python src/trae_tool_adapter.py industry --type <cpi|ppi|gdp> --output <路径>
   ```
-- **生产者物价指数 (PPI)**:
+- **消费信心/社零**:
   ```bash
-  python src/trae_tool_adapter.py industry --type ppi
-  ```
-- **国内生产总值 (GDP)**:
-  ```bash
-  python src/trae_tool_adapter.py industry --type gdp
-  ```
-- **消费者信心指数**:
-  ```bash
-  python src/trae_tool_adapter.py industry --type xfzxx
-  ```
-- **社会消费品零售总额**:
-  ```bash
-  python src/trae_tool_adapter.py industry --type retail
+  python src/trae_tool_adapter.py industry --type <xfzxx|retail> --output <路径>
   ```
 
 ## 最佳实践

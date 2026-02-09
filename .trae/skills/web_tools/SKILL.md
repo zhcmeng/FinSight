@@ -14,25 +14,21 @@ description: 网页抓取补位（PDF/动态页面/反爬场景）
 
 ## 指令
 
-优先使用 Trae 自带能力完成：
-
-- 先用内置搜索获取链接
-- 再用内置网页读取提取正文
-
-只有在以上方式拿不到可用正文时，才允许使用本技能提供的终端工作流。
-
-**严禁**自行编写 Python 脚本。你 **必须** 通过终端（Terminal）调用提供的 CLI 适配器。
+**重要提示**: 
+- **严禁**自行编写 Python 脚本。你 **必须** 通过终端（Terminal）调用提供的 CLI 适配器。
+- 下列命令模板已通过验证，**无需**通过 `--help` 确认参数。
+- **原子化落地**: 建议使用 `--output <路径>` 将抓取到的正文直接落地。
 
 ### 1. 网页抓取 (Crawler)
-- **抓取网页或 PDF 正文（内置网页读取失败时使用）**:
+- **抓取网页或 PDF 正文**:
   ```bash
-  python src/trae_tool_adapter.py web --type click --urls "<URL1>,<URL2>" --task "<任务描述>"
+  python src/trae_tool_adapter.py web --type click --urls "<URL>" --task "<描述>" --output <路径>
   ```
 
 ### 2. 动态搜索补位 (Search)
-- **强动态/反爬场景下补充搜索结果（仅在内置搜索结果明显不足时使用）**:
+- **补充搜索**:
   ```bash
-  python src/trae_tool_adapter.py web --type search_bing --query "<搜索词>"
+  python src/trae_tool_adapter.py web --type search_bing --query "<搜索词>" --output <路径>
   ```
 
 ## 最佳实践

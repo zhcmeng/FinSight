@@ -5,7 +5,95 @@
 
 import akshare as ak
 import pandas as pd
+import re
 from ..base import Tool, ToolResult
+
+def parse_ths_amount(val):
+    """
+    将同花顺报表中的中文单位金额字符串转换为百万人民币。
+    例如: "2420.11亿" -> 242011, "572.59万" -> 5
+    """
+    if pd.isna(val) or val is False or val == "":
+        return 0.0
+    if isinstance(val, (int, float)):
+        return float(val) / 1000000
+    
+    val_str = str(val).strip()
+    if not val_str:
+        return 0.0
+    
+    try:
+        # 提取数字部分
+        num_match = re.search(r'([-+]?\d*\.\d+|\d+)', val_str)
+        if not num_match:
+            return 0.0
+        num = float(num_match.group(1))
+        
+        # 根据单位换算
+        if '亿' in val_str:
+            return num * 100  # 1亿 = 100百万
+        elif '万' in val_str:
+            return num / 100  # 1万 = 0.01百万
+        else:
+            return num / 1000000 # 默认为元
+    except:
+        return 0.0
+
+def preprocess_ths_data(data: pd.DataFrame) -> pd.DataFrame:
+    """
+    预处理同花顺 A 股财报数据。
+    """
+    if data is None or data.empty:
+        return data
+        
+    # 同花顺数据是宽表（行是年份，列是科目），我们需要转置它
+    # 首先处理年份列，通常是 '报告期'
+    date_col = '报告期'
+    if date_col not in data.columns:
+        return data
+        
+    # 只保留数值科目列
+    exclude_cols = ['报告期', '报表核心指标', '报表全部指标']
+    item_cols = [col for col in data.columns if col not in exclude_cols]
+    
+    # 转置
+    df_melted = data.melt(id_vars=[date_col], value_vars=item_cols, var_name='类目', value_name='AMOUNT')
+    
+    # 转换金额
+    df_melted['AMOUNT'] = df_melted['AMOUNT'].apply(parse_ths_amount)
+    
+    # 提取年份
+    df_melted['YEAR'] = df_melted[date_col].astype(str).str.slice(0, 4)
+    
+    # 透视
+    pivot_df = df_melted.pivot_table(
+        index='类目',
+        columns='YEAR',
+        values='AMOUNT',
+        aggfunc='first'
+    ).reset_index()
+    
+    pivot_df.columns.name = None
+    
+    # 恢复原始科目顺序（同花顺列顺序）
+    item_order = {item: idx for idx, item in enumerate(item_cols)}
+    pivot_df['original_order'] = pivot_df['类目'].map(item_order)
+    pivot_df = pivot_df.sort_values('original_order').drop(columns='original_order')
+    
+    # 排序年份并取最近 5 年
+    year_cols = sorted([col for col in pivot_df.columns if col != '类目'])
+    use_years = year_cols[-5:]
+    pivot_df = pivot_df[['类目'] + use_years]
+    
+    # 重命名列
+    pivot_df = pivot_df.rename(columns={'类目': '会计年度 (人民币百万)'})
+    
+    # 视觉增强
+    pivot_df['会计年度 (人民币百万)'] = pivot_df['会计年度 (人民币百万)'].apply(
+        lambda x: f"**{x.lstrip('*')}**" if x.startswith('*') or '合计' in x or '总额' in x or '利润' in x else x.lstrip('*')
+    )
+    
+    return pivot_df
 
 def preprocess_balance_data(data: pd.DataFrame) -> pd.DataFrame:
     """
@@ -214,10 +302,15 @@ class BalanceSheet(Tool):
                 except Exception as e:
                     print(f"Failed to preprocess balance-sheet data for {stock_code}", e)
             elif market == "A":
-                # 获取 A 股年度资产负债表，使用东方财富的年度财报接口
-                data = ak.stock_balance_sheet_by_yearly_em(
+                # 获取 A 股资产负债表，使用同花顺接口，该接口比东方财富接口更稳定
+                data = ak.stock_financial_debt_ths(
                     symbol = stock_code,
+                    indicator = "按年度",
                 )
+                try:
+                    data = preprocess_ths_data(data)
+                except Exception as e:
+                    print(f"Failed to preprocess A-share balance-sheet data for {stock_code}", e)
             else:
                 raise ValueError(f"Unsupported market flag: {market}. Use 'HK' or 'A'.")
         except Exception as e:
@@ -305,6 +398,10 @@ class IncomeStatement(Tool):
             elif market == "A":
                 # 获取 A 股利润表，通过同花顺 (iFinD) 接口获取，该接口数据较为全面
                 data = ak.stock_financial_benefit_ths(symbol=stock_code, indicator='按年度')
+                try:
+                    data = preprocess_ths_data(data)
+                except Exception as e:
+                    print(f"Failed to preprocess A-share income-statement data for {stock_code}", e)
             else:
                 raise ValueError(f"Unsupported market flag: {market}. Use 'HK' or 'A'.")
         except Exception as e:
@@ -394,6 +491,10 @@ class CashFlowStatement(Tool):
             elif market == "A":
                 # 获取 A 股现金流量表，同样使用同花顺接口
                 data = ak.stock_financial_cash_ths(symbol=stock_code, indicator='按年度')
+                try:
+                    data = preprocess_ths_data(data)
+                except Exception as e:
+                    print(f"Failed to preprocess A-share cash-flow data for {stock_code}", e)
             else:
                 raise ValueError(f"Unsupported market flag: {market}. Use 'HK' or 'A'.")
         except Exception as e:

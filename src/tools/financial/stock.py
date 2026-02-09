@@ -238,3 +238,41 @@ class StockPrice(Tool):
                 source="Exchange trading data: OHLCV history."
             )
         ]
+
+class StockDividend(Tool):
+    """
+    分红派息查询工具。
+    获取上市公司的历年分红预案、实施方案、分红比例及股息率等数据。
+    """
+    def __init__(self):
+        super().__init__(
+            name="Stock dividend history",
+            description="Return dividend history, including payout ratios, bonus shares, and dividend yield.",
+            parameters=[
+                {"name": "stock_code", "type": "str", "description": "Ticker, e.g., 600519", "required": True},
+                {"name": "market", "type": "str", "description": "Market flag: A (currently A-share supported)", "required": True},
+            ],
+        )
+
+    async def api_function(self, stock_code: str, market: str = "A"):
+        """
+        使用 AkShare 获取分红数据。
+        """
+        try:
+            if market == "A":
+                # 获取 A 股分红派息数据
+                data = ak.stock_fhps_detail_em(symbol=stock_code)
+            else:
+                # 港股暂不支持
+                data = {"error": "Dividend history currently only supported for A-share."}
+        except Exception as e:
+            print(f"Failed to fetch dividend history for {stock_code}: {e}")
+            data = None
+        return [
+            ToolResult(
+                name=f"{self.name} (ticker: {stock_code})",
+                description=self.description,
+                data=data,
+                source="Eastmoney: Dividend and bonus history."
+            )
+        ]
