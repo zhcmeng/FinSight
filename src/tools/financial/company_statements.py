@@ -7,6 +7,64 @@ import akshare as ak
 import pandas as pd
 from ..base import Tool, ToolResult
 
+def parse_ths_amount(val):
+    """解析同花顺金额字符串，转换为百万单位的浮点数"""
+    if pd.isna(val) or val == "" or val == "--":
+        return 0.0
+    if isinstance(val, (int, float)):
+        return float(val) / 1000000
+    val = str(val)
+    unit = 1.0
+    if '亿' in val:
+        unit = 100.0  # 1亿 = 100百万
+        val = val.replace('亿', '')
+    elif '万' in val:
+        unit = 0.01  # 1万 = 0.01百万
+        val = val.replace('万', '')
+    
+    try:
+        val = val.replace(',', '')
+        return float(val) * unit
+    except:
+        return 0.0
+
+def preprocess_ths_data(df):
+    """将同花顺 (ths) 的宽表格式转换为与东方财富 (em) 一致的格式"""
+    if df is None or df.empty:
+        return df
+    
+    df = df.copy()
+    # 报告期作为年份列
+    years = df['报告期'].tolist()
+    
+    # 转置
+    df = df.set_index('报告期')
+    df = df.transpose()
+    
+    # 重置索引
+    df = df.reset_index()
+    item_col = '会计年度 (人民币百万)'
+    df = df.rename(columns={'index': item_col})
+    
+    # 转换数值
+    for year in years:
+        df[year] = df[year].apply(parse_ths_amount)
+    
+    # 移除导航/分类行
+    blacklist = ['报表核心指标', '报表全部指标', '一、经营活动产生的现金流量', 
+                 '二、投资活动产生的现金流量', '三、筹资活动产生的现金流量',
+                 '一、营业总收入', '二、营业总成本', '三、营业利润', '四、利润总额', '五、净利润']
+    df = df[~df[item_col].isin(blacklist)]
+    
+    # 视觉增强
+    df[item_col] = df[item_col].apply(lambda x: f"**{x}**" if '合计' in x or '总计' in x or '净利润' in x or '总收入' in x else x)
+    
+    # 仅保留最近 5 年
+    year_cols = sorted([col for col in df.columns if col != item_col])[-5:]
+    df = df[[item_col] + year_cols]
+    
+    return df
+
 def preprocess_balance_data(data: pd.DataFrame) -> pd.DataFrame:
     """
     预处理原始资产负债表数据，将其转换为整洁的透视表格式。
@@ -214,10 +272,15 @@ class BalanceSheet(Tool):
                 except Exception as e:
                     print(f"Failed to preprocess balance-sheet data for {stock_code}", e)
             elif market == "A":
-                # 获取 A 股年度资产负债表，使用东方财富的年度财报接口
-                data = ak.stock_balance_sheet_by_yearly_em(
+                # 获取 A 股年度资产负债表，使用同花顺接口，该接口比东财接口更稳定
+                data = ak.stock_financial_debt_ths(
                     symbol = stock_code,
+                    indicator = "按年度",
                 )
+                try:
+                    data = preprocess_ths_data(data)
+                except Exception as e:
+                    print(f"Failed to preprocess A-share balance-sheet data for {stock_code}", e)
             else:
                 raise ValueError(f"Unsupported market flag: {market}. Use 'HK' or 'A'.")
         except Exception as e:
@@ -305,6 +368,10 @@ class IncomeStatement(Tool):
             elif market == "A":
                 # 获取 A 股利润表，通过同花顺 (iFinD) 接口获取，该接口数据较为全面
                 data = ak.stock_financial_benefit_ths(symbol=stock_code, indicator='按年度')
+                try:
+                    data = preprocess_ths_data(data)
+                except Exception as e:
+                    print(f"Failed to preprocess A-share income-statement data for {stock_code}", e)
             else:
                 raise ValueError(f"Unsupported market flag: {market}. Use 'HK' or 'A'.")
         except Exception as e:
@@ -394,6 +461,10 @@ class CashFlowStatement(Tool):
             elif market == "A":
                 # 获取 A 股现金流量表，同样使用同花顺接口
                 data = ak.stock_financial_cash_ths(symbol=stock_code, indicator='按年度')
+                try:
+                    data = preprocess_ths_data(data)
+                except Exception as e:
+                    print(f"Failed to preprocess A-share cash-flow data for {stock_code}", e)
             else:
                 raise ValueError(f"Unsupported market flag: {market}. Use 'HK' or 'A'.")
         except Exception as e:
