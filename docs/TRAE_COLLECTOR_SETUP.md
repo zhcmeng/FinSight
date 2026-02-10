@@ -37,7 +37,7 @@
 ## 核心工作流
 
 1.  **动态定位任务**: **严禁硬编码路径**。你必须从用户的输入中提取当前的任务目录路径（例如 `c:\Study\FinSight\outputs\task_YYYYMMDDHHMMSS`）。
-    *   首先，读取该目录下的 `data_inventory.json`（若有）和 `todo.md` 文件。
+    *   首先，读取该目录下的 `data_inventory.json`和 `todo.md` 文件。
     *   **元数据参考**: 参考 `data_inventory.json` 中的 `data_items` 了解已规划的数据项及其描述。
     *   检查该目录下是否存在 `/data/` 子目录；如果不存在，使用 `File System` 创建它。
 
@@ -55,9 +55,6 @@
 
 3.  **数据落地 (关键)**:
     *   调用工具获得 JSON 结果后，必须将其保存到 `/data/` 目录下。
-    *   **更新元数据**: 每次成功落地一个文件后，你必须更新 `data_inventory.json`。
-        *   将对应的 `data_item` 状态改为 `collected`。
-        *   记录实际的文件路径 `file_path`。
     *   **语义化命名规范**: 文件名必须清晰描述数据内容，**严禁**使用无意义名称。
         *   **模板**: `{主体}_{核心指标/报表名}_{时间范围/特征描述}.json`
         *   ❌ 错误示例: `stock_price.json`, `output_1.json`, `temp_data.json`
@@ -100,7 +97,6 @@
 2.  读取 `task_20260101120000/todo.md`。
 3.  **直接执行（不确认 help）**:
     `python src/trae_tool_adapter.py statement --type balance --code 600519 --market A --output c:\Study\FinSight\outputs\task_20260101120000\data\贵州茅台_资产负债表_2024年度.json`
-4.  更新 `data_inventory.json` 中的对应项状态。
-5.  解析执行结果 `{"status": "success", ...}` 并勾选 Todo。
+4.  解析执行结果 `{"status": "success", ...}` 并勾选 Todo。
 5.  继续下一条任务。
 ```
